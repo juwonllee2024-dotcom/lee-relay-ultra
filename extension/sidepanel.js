@@ -136,7 +136,9 @@ async function advanceUltraFromCompletion(summary) {
     }
     const tab = await requireExecutionForActiveTab();
     const role = ultraState.currentStep?.role || 'implementer';
-    const continuation = `[LEE RELAY ULTRA RUN ${ultraRunId}]\nThe previous workflow step finished with outcome: ${outcome}. You are now the ${role}. Continue the same task in the configured workspace. Keep using exactly one custom TERMINAL or TOOL protocol call per turn, and finish this role with <AGENT_COMPLETE>.`;
+    const continuation = globalThis.UltraPrompt?.buildStepPrompt
+      ? globalThis.UltraPrompt.buildStepPrompt({ runId: ultraRunId, task: ultraState.task || '', role, step: ultraState.currentStep?.id || '', outcome })
+      : `[LEE RELAY ULTRA RUN ${ultraRunId}]\nThe previous workflow step finished with outcome: ${outcome}. You are now the ${role}. Continue the same task in the configured workspace. Keep using exactly one custom TERMINAL or TOOL protocol call per turn, and finish this role with <AGENT_COMPLETE>.`;
     await sendTabMessage(tab.id, { type: 'SEND_USER_MESSAGE', text: continuation });
     addEvent('status', `Ultra advanced to ${role}.`);
   } catch (error) {
@@ -389,7 +391,11 @@ document.getElementById('sendTask').onclick = async () => {
   try {
     const tab = await requireExecutionForActiveTab();
     const runState = await ensureUltraRun(text);
-    const ultraText = runState ? `[LEE RELAY ULTRA RUN ${ultraRunId}]\nCurrent role: ${runState.currentStep?.role || 'planner'}\nFollow the current workflow step. Use the local terminal bridge only inside the configured workspace. Do not ask for per-command approval; the user granted Auto Coding for this run.\n\nTask: ${text}` : text;
+    const ultraText = runState && globalThis.UltraPrompt?.buildStepPrompt
+      ? globalThis.UltraPrompt.buildStepPrompt({ runId: ultraRunId, task: text, role: runState.currentStep?.role || 'planner', step: runState.currentStep?.id || '' })
+      : runState
+        ? `[LEE RELAY ULTRA RUN ${ultraRunId}]\nCurrent role: ${runState.currentStep?.role || 'planner'}\nFollow the current workflow step. Use the local terminal bridge only inside the configured workspace. Do not ask for per-command approval; the user granted Auto Coding for this run.\n\nTask: ${text}`
+        : text;
     const response = await sendTabMessage(tab.id, { type: 'SEND_USER_MESSAGE', text: ultraText });
     if (!response?.ok) throw new Error(response?.error || '작업 요청 전송에 실패했습니다.');
     input.value = '';

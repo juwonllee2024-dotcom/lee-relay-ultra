@@ -13,6 +13,9 @@ workflows. Lee Relay v4.1.1 is not modified.
 - Coding, Review, and Bug Fix workflows.
 - Step, command, retry, and wall-clock Loop Guard.
 - Authenticated `/ultra/*` run API with Auto Coding, Pause, Resume, and Stop.
+- Browse Code style observed-evidence prompt and one-action-per-turn protocol.
+- `<tool='terminal_run'>...</tool>` compatibility mapped to the bounded local terminal.
+- Response-stability waiting, malformed/multiple-action recovery, and result feedback.
 - Chrome MV3 Side Panel controls that preserve the existing manual ChatGPT mode.
 
 ## Start
@@ -20,7 +23,9 @@ workflows. Lee Relay v4.1.1 is not modified.
 1. Set `AGENT_TOKEN` to a long random local value and `AGENT_CWD` to the
    project root the agent may touch. The root must exist.
 2. From `server/`, run `npm install` and `npm start`.
-3. Load `extension/` as an unpacked extension at `chrome://extensions`.
+3. Load exactly the `extension/` folder as an unpacked extension at
+   `chrome://extensions` (the folder selected in the file picker must contain
+   `manifest.json`; do not select the ZIP or the repository root).
 4. Open a ChatGPT tab, open the Side Panel, set the same workspace path, and
    enable the existing Execution Control.
 5. Enable `ULTRA AUTO CODING`, choose a workflow, and send a task.
@@ -52,4 +57,4 @@ npm install
 npm test
 ```
 
-See [ULTRA_SYSTEM_PROMPT.md](ULTRA_SYSTEM_PROMPT.md), the [design spec](docs/superpowers/specs/2026-08-24-lee-relay-ultra-v1-design.md), and the [release checklist](docs/release/v1.0.0-checklist.md).
+See [ULTRA_SYSTEM_PROMPT.md](ULTRA_SYSTEM_PROMPT.md), the [design spec](docs/superpowers/specs/2026-08-24-lee-relay-ultra-v1-design.md), and the [v1.1.0 release checklist](docs/release/v1.1.0-checklist.md).
