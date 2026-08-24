@@ -1,5 +1,7 @@
 @echo off
-echo === ChatGPT Terminal Agent - starting server ===
+echo === Lee Relay Ultra - starting server ===
+if "%AGENT_CWD%"=="" set "AGENT_CWD=%~dp0"
+if "%AGENT_TOKEN%"=="" set "AGENT_TOKEN=chatgpt-agent-local-v1"
 cd /d "%~dp0\server"
 call npm install
 if errorlevel 1 (
@@ -8,7 +10,7 @@ if errorlevel 1 (
   exit /b 1
 )
 echo.
-echo Starting server on http://localhost:5747
+echo Starting Ultra host on http://localhost:5747
 echo (Keep this window open while using the agent.)
 echo.
 node server.js

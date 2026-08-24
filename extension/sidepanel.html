@@ -15,6 +15,16 @@
     <div class="gate-copy"><span class="gate-kicker">EXECUTION CONTROL</span><strong id="executionState">실행 잠금</strong><small id="executionTab">현재 탭에서 실행이 꺼져 있습니다.</small></div>
     <button id="executionToggle" class="execution-toggle" type="button" aria-pressed="false"><span class="toggle-dot"></span><span id="executionToggleLabel">OFF</span></button>
   </section>
+  <section id="ultraGate" class="ultra-gate" aria-label="Ultra Auto Coding">
+    <div class="ultra-head"><div><span class="gate-kicker">LEE RELAY ULTRA</span><strong>Auto Coding</strong></div><span id="ultraModeLabel" class="ultra-mode">OFF</span></div>
+    <p class="ultra-copy">One run grant. Planner → Implementer → Reviewer → Tester. Pause and Stop stay available.</p>
+    <div class="ultra-controls">
+      <label>Workflow<select id="ultraWorkflow"><option value="coding">Coding</option><option value="review">Review</option><option value="bugfix">Bug Fix</option></select></label>
+      <button id="ultraToggle" type="button" aria-pressed="false">ENABLE AUTO CODING</button>
+    </div>
+    <div class="ultra-runline"><span id="ultraRunLabel">No Ultra run</span><span id="ultraStepLabel">Idle</span></div>
+    <div class="ultra-actions"><button id="ultraPause" type="button" disabled>PAUSE</button><button id="ultraStop" type="button" disabled>STOP RUN</button></div>
+  </section>
   <section class="live-card">
     <div class="live-top"><span class="live-dot"></span><span id="liveLabel">대기 중</span><span class="live-time" id="liveTime">--:--</span></div>
     <div class="live-task" id="liveTask">ChatGPT에서 작업을 요청하면 에이전트가 시작됩니다.</div>
@@ -65,6 +75,7 @@
     <div class="composer-foot"><span>ChatGPT 웹으로 전송</span><button id="sendTask">전송</button></div>
   </section>
   <footer>실행 허용은 현재 ChatGPT 탭에만 적용됩니다. 작업은 Side Panel에서만 입력합니다.</footer>
+  <script src="shared/ultra-client.js"></script>
   <script src="sidepanel.js"></script>
 </body>
 </html>

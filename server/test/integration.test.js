@@ -10,7 +10,7 @@ let origin;
 let tempProject;
 
 test.before(async () => {
-  tempProject = await fs.mkdtemp(path.join(os.tmpdir(), 'chatgpt-agent-'));
+  tempProject = await fs.mkdtemp(path.join(process.cwd(), 'lee-relay-ultra-integration-'));
   server = app.listen(0, '127.0.0.1');
   await new Promise((resolve) => server.once('listening', resolve));
   origin = `http://127.0.0.1:${server.address().port}`;
@@ -48,12 +48,12 @@ test('execution requires the agent token', async () => {
 test('PowerShell execution records cwd, result, and timing', async () => {
   const { response, body } = await request('/tools/run_powershell/execute', {
     method: 'POST', headers: { 'content-type': 'application/json', 'x-agent-token': 'chatgpt-agent-local-v1' },
-    body: JSON.stringify({ sessionId: 'integration', input: { cwd: 'C:\\Windows', command: 'Write-Output integration-ok' } }),
+    body: JSON.stringify({ sessionId: 'integration', input: { cwd: tempProject, command: 'Write-Output integration-ok' } }),
   });
   assert.equal(response.status, 202);
   const command = (await request(`/commands/${body.id}/wait?timeout=10000`, { headers: { 'x-agent-token': 'chatgpt-agent-local-v1' } })).body;
   assert.equal(command.status, 'completed');
-  assert.equal(command.cwd, 'C:\\Windows');
+  assert.equal(command.cwd, tempProject);
   assert.equal(command.success, true);
   assert.equal(command.exitCode, 0);
   assert.match(command.result.stdout, /integration-ok/);
@@ -64,10 +64,10 @@ test('PowerShell execution records cwd, result, and timing', async () => {
 test('project inspection accepts an explicit cwd', async () => {
   const { body } = await request('/tools/inspect_project/execute', {
     method: 'POST', headers: { 'content-type': 'application/json', 'x-agent-token': 'chatgpt-agent-local-v1' },
-    body: JSON.stringify({ input: { cwd: 'C:\\Windows' } }),
+    body: JSON.stringify({ input: { cwd: tempProject } }),
   });
   assert.equal(body.tool, 'inspect_project');
-  assert.equal(body.cwd, 'C:\\Windows');
+  assert.equal(body.cwd, tempProject);
 });
 
 test('file tools share cwd and rollback a change', async () => {
@@ -146,7 +146,7 @@ test('GitHub download rejects non-GitHub URLs before running git', async () => {
 test('session stop cancels a running command without retrying', async () => {
   const submitted = await request('/tools/run_powershell/execute', {
     method: 'POST', headers: { 'content-type': 'application/json', 'x-agent-token': 'chatgpt-agent-local-v1' },
-    body: JSON.stringify({ sessionId: 'stop-test', input: { cwd: 'C:\\Windows', command: 'Start-Sleep -Seconds 5' } }),
+    body: JSON.stringify({ sessionId: 'stop-test', input: { cwd: tempProject, command: 'Start-Sleep -Seconds 5' } }),
   });
   await new Promise((resolve) => setTimeout(resolve, 150));
   const stopped = await request('/sessions/stop-test/stop', { method: 'POST', headers: { 'x-agent-token': 'chatgpt-agent-local-v1' } });
@@ -160,7 +160,7 @@ test('session stop cancels a running command without retrying', async () => {
 test('long output keeps a preview and writes a result file', async () => {
   const submitted = await request('/tools/run_powershell/execute', {
     method: 'POST', headers: { 'content-type': 'application/json', 'x-agent-token': 'chatgpt-agent-local-v1' },
-    body: JSON.stringify({ sessionId: 'output-test', input: { cwd: 'C:\\Windows', command: `Write-Output ('x' * 12000)` } }),
+    body: JSON.stringify({ sessionId: 'output-test', input: { cwd: tempProject, command: `Write-Output ('x' * 12000)` } }),
   });
   let command = submitted.body;
   for (let i = 0; i < 30 && !['completed', 'failed'].includes(command.status); i++) { await new Promise((resolve) => setTimeout(resolve, 100)); command = (await request(`/commands/${submitted.body.id}`)).body; }

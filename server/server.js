@@ -5,9 +5,12 @@ const fsp = fs.promises;
 const path = require('path');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
+const { createUltraRunRegistry } = require('./src/ultra-runs');
+const { createWorkspacePolicy } = require('./src/ultra-policy');
+const { resolveAgentToken } = require('./src/ultra-auth');
 
 const app = express();
-const AGENT_TOKEN = process.env.AGENT_TOKEN || 'chatgpt-agent-local-v1';
+const AGENT_TOKEN = resolveAgentToken();
 app.use(cors({ origin: (origin, callback) => {
   if (!origin || origin.startsWith('chrome-extension://') || origin === 'https://chatgpt.com' || origin === 'https://chat.openai.com' || origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) return callback(null, true);
   return callback(new Error('origin not allowed'));
@@ -22,6 +25,8 @@ function requireAgentToken(req, res, next) {
 
 const PORT = Number(process.env.PORT || 5747);
 const ALLOWED_CWD = path.resolve(process.env.AGENT_CWD || process.cwd());
+const workspacePolicy = createWorkspacePolicy({ root: ALLOWED_CWD, autoCoding: true });
+const ultraRuns = createUltraRunRegistry({ baseRoot: ALLOWED_CWD });
 const MAX_OUTPUT = Number(process.env.AGENT_MAX_OUTPUT || 20000);
 const OUTPUT_FILE_THRESHOLD = Number(process.env.AGENT_OUTPUT_FILE_THRESHOLD || 10000);
 const TIMEOUT_MS = Number(process.env.AGENT_TIMEOUT_MS || 60000);
@@ -57,6 +62,13 @@ const toolDefinitions = {
   git_status: { risk: 'low', input: 'none' },
   git_diff: { risk: 'low', input: 'none' },
 };
+
+function ultraActionForTool(tool) {
+  if (['write_file', 'write_text_file', 'edit_file', 'export_text_file', 'github_clone', 'github_download_repo'].includes(tool)) return 'write';
+  if (['run_powershell', 'docker_version'].includes(tool)) return 'terminal';
+  if (['run_tests', 'verify_project'].includes(tool)) return 'test';
+  return 'read';
+}
 
 function id() { return crypto.randomUUID(); }
 function clip(value) { return String(value || '').slice(0, MAX_OUTPUT); }
@@ -140,10 +152,7 @@ async function workingDirectory(value) {
   let requested = String(value || ALLOWED_CWD).trim().replace(/^"|"$/g, '');
   requested = requested.replace(/%([^%]+)%/g, (_, key) => process.env[key] || `%${key}%`);
   if (requested === '~') requested = process.env.USERPROFILE || requested;
-  const target = path.resolve(requested);
-  const stat = await fsp.stat(target);
-  if (!stat.isDirectory()) throw new Error('cwd is not a directory');
-  return await fsp.realpath(target);
+  return workspacePolicy.assertCwd(requested);
 }
 function findPowerShellExe() {
   const candidates = [process.env.SystemRoot && process.env.SystemRoot + '\\System32\\WindowsPowerShell\\v1.0\\powershell.exe', 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe', 'C:\\Program Files\\PowerShell\\7\\pwsh.exe'];
@@ -269,6 +278,18 @@ function publicCommand(command) {
   };
 }
 
+function ultraErrorStatus(error) {
+  if (error?.code === 'E_AUTO_CODING') return 403;
+  if (error?.code === 'E_RUN_NOT_FOUND') return 404;
+  if (error?.code === 'E_LOOP_GUARD') return 409;
+  return 400;
+}
+
+function sendUltraError(res, error) {
+  const code = error?.code === 'E_AUTO_CODING' ? 'auto_coding_required' : (error.code || 'ultra_request_failed');
+  return res.status(ultraErrorStatus(error)).json({ error: code, message: error.message });
+}
+
 async function executeTool(tool, input, commandId) {
   const i = input || {};
   const root = i.cwd ? await workingDirectory(i.cwd) : ALLOWED_CWD;
@@ -357,6 +378,32 @@ function sendTextDownload(res, content, filename) {
 }
 
 app.get('/health', (_req, res) => res.json({ ok: true, cwd: ALLOWED_CWD }));
+app.get('/ultra/health', (_req, res) => res.json({ ok: true, product: 'lee-relay-ultra', version: '1.0.0', cwd: ALLOWED_CWD }));
+app.get('/ultra/roles', requireAgentToken, (_req, res) => res.json({ roles: ultraRuns.roles() }));
+app.get('/ultra/workflows', requireAgentToken, (_req, res) => res.json({ workflows: ultraRuns.workflows() }));
+app.get('/ultra/runs', requireAgentToken, (_req, res) => res.json({ runs: ultraRuns.list() }));
+app.post('/ultra/runs', requireAgentToken, (req, res) => {
+  try {
+    const state = ultraRuns.create(req.body || {});
+    return res.status(202).json({ runId: state.runId, state });
+  } catch (error) {
+    return sendUltraError(res, error);
+  }
+});
+app.get('/ultra/runs/:id', requireAgentToken, (req, res) => {
+  const state = ultraRuns.state(req.params.id);
+  return state ? res.json({ runId: state.runId, state }) : res.status(404).json({ error: 'run_not_found' });
+});
+for (const [action, verb] of [['pause', 'pause'], ['resume', 'resume'], ['stop', 'stop'], ['advance', 'advance']]) {
+  app.post(`/ultra/runs/:id/${verb}`, requireAgentToken, (req, res) => {
+    try {
+      const state = ultraRuns.mutate(req.params.id, action, req.body || {});
+      return res.json({ runId: state.runId, state });
+    } catch (error) {
+      return sendUltraError(res, error);
+    }
+  });
+}
 app.get('/tools', (_req, res) => res.json({ tools: Object.entries(toolDefinitions).map(([name, definition]) => ({ name, ...definition, approvalRequired: definition.risk !== 'low' })) }));
 app.get('/skills', async (_req, res) => res.json({ skills: await loadSkills() }));
 app.get('/plugins', async (_req, res) => res.json({ plugins: await loadPlugins() }));
@@ -384,8 +431,20 @@ app.post('/changes/:id/rollback', requireAgentToken, async (req, res) => { try {
 app.post('/tools/:tool/execute', requireAgentToken, async (req, res) => {
   const definition = toolDefinitions[req.params.tool]; if (!definition) return res.status(404).json({ error: 'unknown tool' });
   const input = req.body && (req.body.input || req.body) || {};
+  const ultraRunId = req.body?.ultraRunId || req.get('x-ultra-run-id');
+  if (ultraRunId) {
+    try {
+      const permission = ultraRuns.authorizeTool(ultraRunId, ultraActionForTool(req.params.tool), req.body?.ultraRole || req.get('x-ultra-role'));
+      if (!permission.allowed) return res.status(403).json({ error: permission.reason, code: permission.reason });
+    } catch (error) {
+      return sendUltraError(res, error);
+    }
+  }
   if (input.cwd) {
     try { input.cwd = await workingDirectory(input.cwd); } catch (error) { return res.status(400).json({ error: `invalid cwd: ${error.message}` }); }
+  }
+  if (req.params.tool === 'run_powershell' || req.params.tool === 'run_tests') {
+    try { input.command = workspacePolicy.assertCommand(input.command); } catch (error) { return res.status(400).json({ error: error.message, code: error.code }); }
   }
   const command = { id: id(), tool: req.params.tool, input, cwd: input.cwd || null, sessionId: (req.body && req.body.sessionId) || 'default', status: 'queued', risk: definition.risk, attempts: 0, createdAt: new Date().toISOString() };
   commands.set(command.id, command); recordSessionCommand(command); await saveSessions();
@@ -429,7 +488,7 @@ async function runCommand(command) {
 }
 app.post('/commands/:id/:action', requireAgentToken, async (req, res) => { const c = commands.get(req.params.id); if (!c) return res.status(404).json({ error: 'command not found' }); const action = req.params.action; if (action === 'approve' && c.status === 'awaiting_approval') runCommand(c); else if (action === 'reject' && c.status === 'awaiting_approval') c.status = 'rejected'; else if (action === 'cancel' && ['awaiting_approval', 'queued', 'running'].includes(c.status)) { commandStops.set(c.id, 'cancelled'); c.status = 'cancelled'; if (children.has(c.id)) children.get(c.id).kill(); } else return res.status(409).json({ error: 'invalid command state' }); await saveSessions(); res.json(publicCommand(c)); });
 
-app.post('/exec', requireAgentToken, async (req, res) => { const { command, cwd, requestId } = req.body || {}; if (typeof command !== 'string' || !command.trim()) return res.status(400).json({ error: 'command is required' }); try { const result = await runPowerShell(command, await workingDirectory(cwd), requestId || id()); res.json({ ok: true, requestId, ...result }); } catch (e) { res.status(400).json({ error: e.message }); } });
+app.post('/exec', requireAgentToken, async (req, res) => { const { command, cwd, requestId } = req.body || {}; if (typeof command !== 'string' || !command.trim()) return res.status(400).json({ error: 'command is required' }); try { const safeCommand = workspacePolicy.assertCommand(command); const result = await runPowerShell(safeCommand, await workingDirectory(cwd), requestId || id()); res.json({ ok: true, requestId, ...result }); } catch (e) { res.status(400).json({ error: e.message }); } });
 
 if (require.main === module) {
   Promise.all([loadSessions(), loadSkills(), loadPlugins()]).then(() => app.listen(PORT, '127.0.0.1', () => console.log(`ChatGPT Agent server listening on http://127.0.0.1:${PORT}\nAllowing cwd: ${ALLOWED_CWD}`)));

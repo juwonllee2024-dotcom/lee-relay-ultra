@@ -210,8 +210,14 @@ function isPlaceholderCommand(command) {
   return /^(?:one|a)\s+PowerShell command\.?$/i.test(value) || /^(?:\.\.\.|…)$/.test(value);
 }
 
+function getUltraContext() {
+  if (typeof readUltraContext === 'function') return readUltraContext(chrome.storage?.local);
+  return Promise.resolve({ ultraRunId: '', ultraRole: '' });
+}
+
 async function sendToServer(command) {
   const cwd = await getCwd();
+  const ultra = await getUltraContext();
   const requestId = `req-${++sequence}`;
   if (isPlaceholderCommand(command)) {
     const stderr = 'The agent emitted a placeholder instead of a real PowerShell command. No command was executed.';
@@ -225,7 +231,7 @@ async function sendToServer(command) {
     const resp = await fetch(`${SERVER_URL}/tools/run_powershell/execute`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Agent-Token': AGENT_TOKEN },
-      body: JSON.stringify({ sessionId: 'chatgpt-web', input: { command, cwd } }),
+      body: JSON.stringify({ sessionId: 'chatgpt-web', ultraRunId: ultra.ultraRunId, ultraRole: ultra.ultraRole, input: { command, cwd } }),
     });
     let data = await resp.json();
     if (!resp.ok) throw new Error(data.error || 'command submission failed');
@@ -302,13 +308,14 @@ function extractToolCalls(text) {
 
 async function sendToolToServer(tool) {
   const cwd = await getCwd();
+  const ultra = await getUltraContext();
   const name = String(tool.name || '');
   const failure = (status, error) => ({ tool: name || 'unknown', status, result: null, error });
   if (!/^[a-z][a-z0-9_]*$/.test(name)) return failure('unsupported', '잘못된 도구 이름입니다.');
   try {
     const response = await fetch(`${SERVER_URL}/tools/${name}/execute`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Agent-Token': AGENT_TOKEN },
-      body: JSON.stringify({ sessionId: 'chatgpt-web', input: { ...(tool.input || {}), cwd } }),
+      body: JSON.stringify({ sessionId: 'chatgpt-web', ultraRunId: ultra.ultraRunId, ultraRole: ultra.ultraRole, input: { ...(tool.input || {}), cwd } }),
     });
     let data = await response.json().catch(() => ({}));
     if (!response.ok) {

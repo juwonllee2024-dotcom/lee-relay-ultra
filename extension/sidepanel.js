@@ -3,12 +3,19 @@ const events = document.getElementById('events');
 const status = document.getElementById('status');
 const steps = ['planning', 'skills', 'files', 'approval', 'running', 'analyzing', 'fixing', 'testing', 'completed'];
 const AGENT_TOKEN = 'chatgpt-agent-local-v1';
+const ultraClient = typeof createUltraClient === 'function' ? createUltraClient({ server: SERVER, token: AGENT_TOKEN }) : null;
 let currentStep = 'planning';
 let lastCommand = '';
 let eventTotal = 0;
 let skillCatalog = {};
 let activeTabId = null;
 let executionEnabled = false;
+let ultraEnabled = false;
+let ultraRunId = null;
+let ultraState = null;
+let ultraPollTimer = null;
+let ultraAdvancing = false;
+let ultraStorageHydrated = false;
 const CHATGPT_HOSTS = new Set(['chatgpt.com', 'chat.openai.com']);
 
 function isChatGPTTab(tab) {
@@ -47,6 +54,96 @@ function setExecutionUI(enabled, tabLabel = '') {
     if (element) element.disabled = !executionEnabled;
   }
   document.querySelectorAll('.execution-action').forEach((element) => { element.disabled = !executionEnabled; });
+  if (typeof setUltraUI === 'function') setUltraUI(ultraEnabled, ultraState);
+}
+
+function setUltraUI(enabled = ultraEnabled, state = ultraState) {
+  ultraEnabled = Boolean(enabled);
+  ultraState = state || null;
+  const gate = document.getElementById('ultraGate');
+  const toggle = document.getElementById('ultraToggle');
+  const mode = document.getElementById('ultraModeLabel');
+  const pause = document.getElementById('ultraPause');
+  const stop = document.getElementById('ultraStop');
+  const terminal = ['completed', 'stopped', 'failed'].includes(ultraState?.status);
+  gate?.classList.toggle('enabled', ultraEnabled);
+  if (toggle) {
+    toggle.disabled = !executionEnabled || !activeTabId;
+    toggle.setAttribute('aria-pressed', String(ultraEnabled));
+    toggle.textContent = ultraEnabled ? 'AUTO CODING ON' : 'ENABLE AUTO CODING';
+  }
+  if (mode) mode.textContent = ultraEnabled ? (ultraState?.status || 'READY').toUpperCase() : 'OFF';
+  if (pause) {
+    pause.disabled = !ultraState || terminal;
+    pause.textContent = ultraState?.status === 'paused' ? 'RESUME' : 'PAUSE';
+  }
+  if (stop) stop.disabled = !ultraState || terminal;
+  const runLabel = document.getElementById('ultraRunLabel');
+  const stepLabel = document.getElementById('ultraStepLabel');
+  if (runLabel) runLabel.textContent = ultraState ? `Run ${ultraState.runId.slice(0, 8)} · ${ultraState.status}` : 'No Ultra run';
+  if (stepLabel) stepLabel.textContent = ultraState?.currentStep ? `${ultraState.currentStep.role} · ${ultraState.currentStep.id}` : 'Idle';
+  if (ultraStorageHydrated) {
+    try { chrome.storage.local.set({ ultraRunId: ultraRunId || '', ultraRole: ultraState?.currentStep?.role || '' }); } catch (_) {}
+  }
+}
+
+async function refreshUltraRun(silent = true) {
+  if (!ultraClient || !ultraRunId) return;
+  try {
+    const data = await ultraClient.getRun(ultraRunId);
+    ultraState = data.state;
+    if (['completed', 'stopped', 'failed'].includes(ultraState.status)) ultraEnabled = false;
+    setUltraUI(ultraEnabled, ultraState);
+  } catch (error) {
+    if (!silent) addEvent('error', `Ultra run status failed: ${error.message}`);
+  }
+}
+
+function startUltraPolling() {
+  if (ultraPollTimer) clearInterval(ultraPollTimer);
+  ultraPollTimer = setInterval(() => refreshUltraRun(true), 2500);
+}
+
+async function ensureUltraRun(task) {
+  if (!ultraClient || !ultraEnabled) return null;
+  if (ultraRunId && ultraState && ['running', 'paused'].includes(ultraState.status)) return ultraState;
+  const cwd = document.getElementById('cwd').value.trim();
+  if (!cwd) throw new Error('Set a workspace before starting Ultra Auto Coding.');
+  const workflowId = document.getElementById('ultraWorkflow').value || 'coding';
+  const created = await ultraClient.createRun({ task, cwd, workflowId });
+  ultraRunId = created.runId;
+  ultraState = created.state;
+  setUltraUI(true, ultraState);
+  startUltraPolling();
+  addEvent('status', `Ultra run ${ultraRunId.slice(0, 8)} started · ${ultraState.currentStep?.role || 'planner'}`);
+  return ultraState;
+}
+
+async function advanceUltraFromCompletion(summary) {
+  if (!ultraClient || !ultraRunId || !ultraState || ultraAdvancing || ultraState.status !== 'running') return;
+  ultraAdvancing = true;
+  try {
+    const text = String(summary || '');
+    const outcome = /\b(?:fail|failed|error|not pass|broken)\b/i.test(text) ? 'fail' : 'pass';
+    const result = await ultraClient.advance(ultraRunId, { outcome, summary: text.slice(0, 3000) });
+    ultraState = result.state;
+    setUltraUI(ultraEnabled, ultraState);
+    if (ultraState.status === 'completed') {
+      ultraEnabled = false;
+      setUltraUI(false, ultraState);
+      addEvent('complete', `Ultra run ${ultraRunId.slice(0, 8)} completed.`);
+      return;
+    }
+    const tab = await requireExecutionForActiveTab();
+    const role = ultraState.currentStep?.role || 'implementer';
+    const continuation = `[LEE RELAY ULTRA RUN ${ultraRunId}]\nThe previous workflow step finished with outcome: ${outcome}. You are now the ${role}. Continue the same task in the configured workspace. Keep using exactly one custom TERMINAL or TOOL protocol call per turn, and finish this role with <AGENT_COMPLETE>.`;
+    await sendTabMessage(tab.id, { type: 'SEND_USER_MESSAGE', text: continuation });
+    addEvent('status', `Ultra advanced to ${role}.`);
+  } catch (error) {
+    addEvent('error', `Ultra workflow advance failed: ${error.message}`);
+  } finally {
+    ultraAdvancing = false;
+  }
 }
 
 async function loadExecutionState() {
@@ -180,12 +277,20 @@ function addEvent(kind, text, commandId) {
 }
 
 function load() {
-  chrome.storage.local.get(['cwd', 'autoEnabled', 'agentEvents', 'agentActive'], (data) => {
+  chrome.storage.local.get(['cwd', 'autoEnabled', 'agentEvents', 'agentActive', 'ultraEnabled', 'ultraRunId'], (data) => {
     document.getElementById('cwd').value = data.cwd || '';
     document.getElementById('consolePath').textContent = data.cwd || 'workspace not set';
     const history = data.agentEvents || [];
     document.getElementById('welcome').hidden = executionEnabled;
     for (const event of history.slice(-50)) addEvent(event.kind, event.text, event.commandId);
+    ultraRunId = data.ultraRunId || null;
+    ultraEnabled = Boolean(data.ultraEnabled && ultraRunId);
+    ultraStorageHydrated = true;
+    setUltraUI(ultraEnabled, ultraState);
+    if (ultraRunId) {
+      refreshUltraRun(false);
+      startUltraPolling();
+    }
   });
 }
 
@@ -209,7 +314,61 @@ document.getElementById('executionToggle').onclick = async () => {
     addEvent('error', tabErrorMessage(error));
   }
 };
+document.getElementById('ultraToggle').onclick = async () => {
+  try {
+    await requireExecutionForActiveTab();
+    if (!ultraEnabled) {
+      ultraEnabled = true;
+      setUltraUI(true, ultraState);
+      chrome.storage.local.set({ ultraEnabled: true });
+      addEvent('status', 'Ultra Auto Coding enabled for this run.');
+    } else {
+      if (ultraRunId && ultraState?.status === 'running') {
+        const paused = await ultraClient.pause(ultraRunId);
+        ultraState = paused.state;
+      }
+      ultraEnabled = false;
+      setUltraUI(false, ultraState);
+      chrome.storage.local.set({ ultraEnabled: false });
+      addEvent('status', 'Ultra Auto Coding paused.');
+    }
+  } catch (error) {
+    addEvent('error', tabErrorMessage(error));
+  }
+};
+document.getElementById('ultraPause').onclick = async () => {
+  if (!ultraRunId || !ultraClient) return;
+  try {
+    const result = ultraState?.status === 'paused' ? await ultraClient.resume(ultraRunId) : await ultraClient.pause(ultraRunId);
+    ultraState = result.state;
+    setUltraUI(ultraEnabled, ultraState);
+    addEvent('status', `Ultra run ${ultraState.status}.`);
+  } catch (error) {
+    addEvent('error', `Ultra control failed: ${error.message}`);
+  }
+};
+document.getElementById('ultraStop').onclick = async () => {
+  if (!ultraRunId || !ultraClient) return;
+  try {
+    ultraState = (await ultraClient.stop(ultraRunId, 'user_stop')).state;
+    ultraEnabled = false;
+    setUltraUI(false, ultraState);
+    addEvent('status', 'Ultra run stopped.');
+    document.getElementById('stopAgent').click();
+  } catch (error) {
+    addEvent('error', `Ultra stop failed: ${error.message}`);
+  }
+};
 document.getElementById('stopAgent').onclick = async () => {
+  if (ultraClient && ultraRunId && ultraState && !['completed', 'stopped', 'failed'].includes(ultraState.status)) {
+    try {
+      ultraState = (await ultraClient.stop(ultraRunId, 'user_stop')).state;
+      ultraEnabled = false;
+      setUltraUI(false, ultraState);
+    } catch (error) {
+      addEvent('error', `Ultra stop failed: ${error.message}`);
+    }
+  }
   const response = await fetch(`${SERVER}/sessions/chatgpt-web/stop`, { method: 'POST', headers: { 'X-Agent-Token': 'chatgpt-agent-local-v1' } });
   const result = await response.json();
   chrome.storage.local.set({ agentActive: executionEnabled });
@@ -229,7 +388,9 @@ document.getElementById('sendTask').onclick = async () => {
   addEvent('info', `사용자 요청: ${text}`);
   try {
     const tab = await requireExecutionForActiveTab();
-    const response = await sendTabMessage(tab.id, { type: 'SEND_USER_MESSAGE', text });
+    const runState = await ensureUltraRun(text);
+    const ultraText = runState ? `[LEE RELAY ULTRA RUN ${ultraRunId}]\nCurrent role: ${runState.currentStep?.role || 'planner'}\nFollow the current workflow step. Use the local terminal bridge only inside the configured workspace. Do not ask for per-command approval; the user granted Auto Coding for this run.\n\nTask: ${text}` : text;
+    const response = await sendTabMessage(tab.id, { type: 'SEND_USER_MESSAGE', text: ultraText });
     if (!response?.ok) throw new Error(response?.error || '작업 요청 전송에 실패했습니다.');
     input.value = '';
   } catch (error) {
@@ -297,7 +458,16 @@ document.getElementById('clear').onclick = () => {
   setStep('planning');
   chrome.storage.local.set({ agentEvents: [], agentActive: false });
 };
-chrome.storage.onChanged.addListener((changes) => { if (changes.agentEvents) { const list = changes.agentEvents.newValue || []; const last = list[list.length - 1]; if (last) addEvent(last.kind, last.text, last.commandId); } });
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes.agentEvents) {
+    const list = changes.agentEvents.newValue || [];
+    const last = list[list.length - 1];
+    if (last) {
+      addEvent(last.kind, last.text, last.commandId);
+      if (last.kind === 'complete') advanceUltraFromCompletion(last.text);
+    }
+  }
+});
 fetch(`${SERVER}/health`).then((r) => r.json()).then(() => { status.textContent = '서버 연결됨'; }).catch(() => { status.textContent = '서버 꺼짐'; status.style.color = '#ff9b9b'; });
 fetch(`${SERVER}/skills`).then((r) => r.json()).then((data) => {
   skillCatalog = Object.fromEntries((data.skills || []).map((skill) => [skill.name, skill.content]));
@@ -305,6 +475,16 @@ fetch(`${SERVER}/skills`).then((r) => r.json()).then((data) => {
 }).catch(() => {});
 fetch(`${SERVER}/plugins`).then((r) => r.json()).then((data) => {
   document.getElementById('plugins').textContent = `플러그인: ${(data.plugins || []).map((plugin) => '@' + plugin.name).join(', ') || '없음'}`;
+}).catch(() => {});
+if (ultraClient) ultraClient.workflows().then((data) => {
+  const select = document.getElementById('ultraWorkflow');
+  select.replaceChildren();
+  for (const workflow of data.workflows || []) {
+    const option = document.createElement('option');
+    option.value = workflow.id;
+    option.textContent = workflow.name;
+    select.appendChild(option);
+  }
 }).catch(() => {});
 async function loadExports() {
   try {

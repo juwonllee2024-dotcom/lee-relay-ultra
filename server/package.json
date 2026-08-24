@@ -1,1 +1,15 @@
-﻿{"name":"chatgpt-agent-server","version":"1.0.0","description":"Local server that executes commands sent from ChatGPT via the Chrome extension","main":"server.js","type":"commonjs","scripts":{"start":"node server.js","test":"node --test test/*.test.js ../extension/content.test.js"},"dependencies":{"express":"^4.19.2","cors":"^2.8.5"}}
+{
+  "name": "lee-relay-ultra-server",
+  "version": "1.0.0",
+  "description": "Bounded local execution host for Lee Relay Ultra coding workflows",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/*.test.js ../extension/*.test.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5"
+  }
+}
