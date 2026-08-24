@@ -1,6 +1,6 @@
 {
   "name": "lee-relay-ultra-server",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Bounded local execution host for Lee Relay Ultra coding workflows",
   "main": "server.js",
   "type": "commonjs",

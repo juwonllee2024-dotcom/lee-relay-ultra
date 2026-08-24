@@ -5,8 +5,11 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const source = fs.readFileSync(path.join(__dirname, 'content.js'), 'utf8');
+const promptSource = fs.readFileSync(path.join(__dirname, 'shared', 'ultra-prompt.js'), 'utf8');
+const protocolSource = fs.readFileSync(path.join(__dirname, 'shared', 'ultra-protocol.js'), 'utf8');
 const sidePanelSource = fs.readFileSync(path.join(__dirname, 'sidepanel.js'), 'utf8');
 const backgroundSource = fs.readFileSync(path.join(__dirname, 'background.js'), 'utf8');
+const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, 'manifest.json'), 'utf8'));
 
 function createHarness({ buttonSubmits = true, useFormSubmitButton = false, contentEditable = false, fetchImpl, executionEnabled = true } = {}) {
   let messageListener;
@@ -156,6 +159,8 @@ function createHarness({ buttonSubmits = true, useFormSubmitButton = false, cont
     setTimeout,
     clearTimeout,
   };
+  vm.runInNewContext(promptSource, context, { filename: 'shared/ultra-prompt.js' });
+  vm.runInNewContext(protocolSource, context, { filename: 'shared/ultra-protocol.js' });
   vm.runInNewContext(source, context, { filename: 'content.js' });
   if (executionEnabled) messageListener({ type: 'EXECUTION_STATE', enabled: true }, {}, () => {});
 
@@ -306,4 +311,21 @@ test('background service worker schedules heartbeats for registered agent tabs',
   assert.match(backgroundSource, /chrome\.storage\.session/);
   assert.match(source, /executionEnabled = false/);
   assert.match(source, /EXECUTION_STATE/);
+});
+
+test('extension loads the canonical Browse Code style prompt and protocol before content handling', () => {
+  const scripts = manifest.content_scripts.flatMap((entry) => entry.js || []);
+  assert.ok(scripts.indexOf('shared/ultra-prompt.js') >= 0);
+  assert.ok(scripts.indexOf('shared/ultra-protocol.js') >= 0);
+  assert.ok(scripts.indexOf('content.js') > scripts.indexOf('shared/ultra-prompt.js'));
+  assert.ok(scripts.indexOf('content.js') > scripts.indexOf('shared/ultra-protocol.js'));
+  assert.match(source, /UltraPrompt/);
+  assert.match(source, /UltraProtocol/);
+  assert.match(sidePanelSource, /buildStepPrompt/);
+});
+
+test('content waits for a finished response and corrects multiple actions instead of dropping one', () => {
+  assert.match(source, /isAssistantGenerating/);
+  assert.match(source, /one_action_per_turn/);
+  assert.match(source, /exactly one.*action|one custom.*action/i);
 });

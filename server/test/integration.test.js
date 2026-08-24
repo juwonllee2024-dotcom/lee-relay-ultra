@@ -37,6 +37,13 @@ test('health exposes a local server', async () => {
   assert.equal(body.ok, true);
 });
 
+test('Ultra health exposes the Browse Code loop release version', async () => {
+  const { response, body } = await request('/ultra/health');
+  assert.equal(response.status, 200);
+  assert.equal(body.product, 'lee-relay-ultra');
+  assert.equal(body.version, '1.1.0');
+});
+
 test('execution requires the agent token', async () => {
   const { response } = await request('/tools/run_powershell/execute', {
     method: 'POST', headers: { 'content-type': 'application/json' },

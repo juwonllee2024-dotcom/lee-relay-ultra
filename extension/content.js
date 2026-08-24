@@ -1,7 +1,10 @@
 const SERVER_URL = 'http://localhost:5747';
 const AGENT_TOKEN = 'chatgpt-agent-local-v1';
-const AGENT_BOOTSTRAP_MARKER = '<AGENT_BOOTSTRAP>chatgpt-agent-local-v2</AGENT_BOOTSTRAP>';
-const LOCAL_CODING_DIRECTIVE = 'This is a local coding task. Never use native image generation, image search, web search, canvas, browser automation, or any non-text UI tool. Never create or request an image. For visual website work, edit the local project files using the custom TERMINAL or TOOL protocol. Output exactly one real custom TERMINAL or TOOL call, starting with inspect_project when project context is needed.';
+const AGENT_BOOTSTRAP_MARKER = '<AGENT_BOOTSTRAP>chatgpt-agent-local-v3</AGENT_BOOTSTRAP>';
+const LEGACY_BOOTSTRAP_MARKERS = ['<AGENT_BOOTSTRAP>chatgpt-agent-local-v2</AGENT_BOOTSTRAP>'];
+const ULTRA_PROMPT = typeof globalThis !== 'undefined' ? globalThis.UltraPrompt : null;
+const ULTRA_PROTOCOL = typeof globalThis !== 'undefined' ? globalThis.UltraProtocol : null;
+const LOCAL_CODING_DIRECTIVE = ULTRA_PROMPT?.CODING_DIRECTIVE || 'This is a local coding task. Never use native image generation, image search, web search, canvas, browser automation, or any non-text UI tool. Never create or request an image. For visual website work, edit the local project files using the custom TERMINAL or TOOL protocol. Output exactly one real custom TERMINAL or TOOL call, starting with inspect_project when project context is needed.';
 const COMMAND_RE = /<TERMINAL>([\s\S]*?)<\/TERMINAL>/gi;
 let sequence = 0;
 let processing = false;
@@ -58,6 +61,7 @@ function logEvent(kind, text, commandId) {
 }
 
 function buildResultMessage(result) {
+  if (ULTRA_PROTOCOL?.buildTerminalResultMessage) return ULTRA_PROTOCOL.buildTerminalResultMessage(result);
   const { requestId, exitCode, stdout, stderr, timedOut, command, outputFile, outputId } = result;
   const previewLimit = result.outputFile ? 3000 : 20000;
   const preview = (value) => String(value || '').slice(0, previewLimit);
@@ -90,12 +94,13 @@ function protocolText() {
 }
 
 function hasAgentBootstrap() {
-  return protocolText().includes(AGENT_BOOTSTRAP_MARKER);
+  const pageText = protocolText();
+  return [AGENT_BOOTSTRAP_MARKER, ...LEGACY_BOOTSTRAP_MARKERS].some((marker) => pageText.includes(marker));
 }
 
 function hideBootstrapBubble() {
   const bubble = [...document.querySelectorAll('[data-message-author-role="user"]')]
-    .find((node) => node.textContent?.includes(AGENT_BOOTSTRAP_MARKER) || node.textContent?.includes('<AGENT_TASK>'));
+    .find((node) => [AGENT_BOOTSTRAP_MARKER, ...LEGACY_BOOTSTRAP_MARKERS].some((marker) => node.textContent?.includes(marker)) || node.textContent?.includes('<AGENT_TASK>'));
   if (bubble) {
     bubble.dataset.chatgptAgentBootstrap = 'hidden';
     bubble.style.display = 'none';
@@ -103,6 +108,7 @@ function hideBootstrapBubble() {
 }
 
 function buildBootstrap() {
+  if (ULTRA_PROMPT?.buildSystemPrompt) return ULTRA_PROMPT.buildSystemPrompt({ marker: AGENT_BOOTSTRAP_MARKER });
   return `${AGENT_BOOTSTRAP_MARKER}\nYou are a local coding agent connected to Windows PowerShell. Follow these rules exactly.\nImportant: TERMINAL and TOOL are custom text protocols implemented by a Chrome extension, not native ChatGPT tools. Never claim that a custom tool is unregistered or unavailable. Output the protocol and wait for the result.\nBefore every action, output one status marker: <AGENT_STATUS>planning|skills|files|approval|running|analyzing|fixing|testing|completed</AGENT_STATUS>.\nAlso output one short user-facing explanation in <AGENT_NOTE>what you are doing and why</AGENT_NOTE>. Do not reveal private chain-of-thought; give only a concise progress update.\nWhen choosing expertise, output <SKILL>@name</SKILL>.\nAt the start of every coding task, first call inspect_project with the configured working directory. Do not assume npm, a framework, or a test command.\nPowerShell format: output exactly one real PowerShell command inside <TERMINAL>...</TERMINAL>. Never output the placeholder words one PowerShell command. Local tool format: output exactly one real JSON call inside <TOOL>...</TOOL>. Use exactly one TERMINAL or TOOL per turn.\nCustom tools: inspect_project, verify_project, read_file, read_text_file, write_file, write_text_file, export_text_file, edit_file, search_files, list_directory, run_powershell, git_status, git_diff, run_tests, github_status, github_clone, github_download_repo, docker_version.\nAfter every TERMINAL_RESULT or TOOL_RESULT, analyze the result. If it failed, output <AGENT_STATUS>fixing</AGENT_STATUS>, explain the cause briefly in <AGENT_NOTE>, and produce one corrected action. Before completion, call verify_project and only report completed when verified is true or when you explicitly explain that no test/build script exists. When finished, output <AGENT_STATUS>completed</AGENT_STATUS>, an <AGENT_NOTE>final verification summary</AGENT_NOTE>, and <AGENT_COMPLETE>summary</AGENT_COMPLETE>. Available skills: @coding, @powershell, @debugging, @testing, @git.`;
 }
 
@@ -115,6 +121,7 @@ function bootstrapPrompt() {
 
 function taskPrompt(text) {
   const skill = pendingSkillPrompt ? `\n\n${pendingSkillPrompt}` : '';
+  if (ULTRA_PROMPT?.buildTaskPrompt) return ULTRA_PROMPT.buildTaskPrompt({ task: `${skill}\n${String(text).trim()}` });
   return `${LOCAL_CODING_DIRECTIVE}${skill}\n\nThe user task from the Side Panel is:\n${String(text).trim()}`;
 }
 
@@ -290,6 +297,7 @@ function getLatestAssistantBubble() {
 }
 
 function extractToolCalls(text) {
+  if (ULTRA_PROTOCOL?.parseAgentResponse) return ULTRA_PROTOCOL.parseAgentResponse(text).toolCalls;
   const calls = [];
   const re = /<TOOL>\s*([\s\S]*?)\s*<\/TOOL>/gi;
   let match;
@@ -552,6 +560,7 @@ async function typeAndSendWithRetry(text, label = 'ChatGPT 메시지') {
 }
 
 function extractCommands(text) {
+  if (ULTRA_PROTOCOL?.parseAgentResponse) return ULTRA_PROTOCOL.parseAgentResponse(text).terminalCommands;
   const results = [];
   let m;
   const re = new RegExp(COMMAND_RE.source, 'gi');
@@ -559,6 +568,16 @@ function extractCommands(text) {
     results.push(m[1].trim());
   }
   return results;
+}
+
+function isAssistantGenerating() {
+  const buttons = [...document.querySelectorAll('button, [role="button"]')];
+  return buttons.some((button) => {
+    const label = `${button.getAttribute?.('aria-label') || ''} ${button.getAttribute?.('title') || ''} ${button.textContent || ''}`;
+    const rect = button.getBoundingClientRect?.();
+    const visible = !rect || (rect.width > 0 && rect.height > 0);
+    return visible && /stop generating|stop response|cancel response|응답 중지|생성 중지/i.test(label);
+  });
 }
 
 async function processNewMessages() {
@@ -581,7 +600,7 @@ async function processNewMessages() {
     if (!bubble) return;
     const text = bubble.innerText || '';
     if (text) readAgentMarkers(text);
-    if (/<AGENT_COMPLETE>[\s\S]*?<\/AGENT_COMPLETE>/i.test(text) || (/작업이 완료|작업을 완료|완료했습니다|task is complete|completed successfully/i.test(text) && !text.includes('<TERMINAL>'))) {
+    if (!isAssistantGenerating() && (/<AGENT_COMPLETE>[\s\S]*?<\/AGENT_COMPLETE>/i.test(text) || (/작업이 완료|작업을 완료|완료했습니다|task is complete|completed successfully/i.test(text) && !text.includes('<TERMINAL>')))) {
       const completionKey = `completed-${bubble.getAttribute('data-message-id') || `${text.length}:${text.slice(-120)}`}`;
       if (!processed.has(completionKey)) {
         processed.add(completionKey);
@@ -599,7 +618,8 @@ async function processNewMessages() {
       setTimeout(processNewMessages, 1200);
       return;
     }
-    if (Date.now() - candidateSince < 1000) return;
+    if (isAssistantGenerating()) return;
+    if (Date.now() - candidateSince < 1400) return;
     const key = bubbleKey(bubble);
     if (processed.has(key)) return;
 
@@ -619,6 +639,18 @@ async function processNewMessages() {
 
     const commands = extractCommands(text);
     const tools = extractToolCalls(text);
+    const parsed = ULTRA_PROTOCOL?.parseAgentResponse ? ULTRA_PROTOCOL.parseAgentResponse(text) : null;
+    if (parsed?.protocolError === 'one_action_per_turn') {
+      const correction = `${LOCAL_CODING_DIRECTIVE}\nProtocol error: one_action_per_turn. Your previous response contained multiple actions. Do not execute anything yet. Emit exactly one real <TERMINAL>...</TERMINAL> or <TOOL>...</TOOL> action, then stop immediately.`;
+      try {
+        await typeAndSendWithRetry(correction, '한 턴 한 작업 프로토콜 재요청');
+        processed.add(key);
+        logEvent('error', '한 응답에 여러 작업이 있어 실행하지 않고 하나씩 다시 요청했습니다.');
+      } catch (error) {
+        logEvent('error', `한 턴 한 작업 재요청 실패: ${error.message}`);
+      }
+      return;
+    }
     if (!commands.length && !tools.length) {
       if (protocolRecoveryAttempts >= 2) {
         logEvent('error', 'ChatGPT가 로컬 코딩 프로토콜을 사용하지 않았습니다. 이미지 생성이나 일반 응답은 실행하지 않습니다.');
@@ -639,7 +671,7 @@ async function processNewMessages() {
     protocolRecoveryAttempts = 0;
 
     console.log('[agent] detected commands:', commands);
-    logEvent('info', `명령 ${commands.length}개를 감지했습니다.`);
+    logEvent('info', `프로토콜 작업 ${commands.length + tools.length}개를 감지했습니다.`);
     const cmd = commands[0];
     if (cmd) {
       const result = await sendToServer(cmd);

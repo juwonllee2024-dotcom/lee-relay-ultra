@@ -5,6 +5,7 @@ const fsp = fs.promises;
 const path = require('path');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
+const SERVER_VERSION = require('./package.json').version;
 const { createUltraRunRegistry } = require('./src/ultra-runs');
 const { createWorkspacePolicy } = require('./src/ultra-policy');
 const { resolveAgentToken } = require('./src/ultra-auth');
@@ -378,7 +379,7 @@ function sendTextDownload(res, content, filename) {
 }
 
 app.get('/health', (_req, res) => res.json({ ok: true, cwd: ALLOWED_CWD }));
-app.get('/ultra/health', (_req, res) => res.json({ ok: true, product: 'lee-relay-ultra', version: '1.0.0', cwd: ALLOWED_CWD }));
+app.get('/ultra/health', (_req, res) => res.json({ ok: true, product: 'lee-relay-ultra', version: SERVER_VERSION, cwd: ALLOWED_CWD }));
 app.get('/ultra/roles', requireAgentToken, (_req, res) => res.json({ roles: ultraRuns.roles() }));
 app.get('/ultra/workflows', requireAgentToken, (_req, res) => res.json({ workflows: ultraRuns.workflows() }));
 app.get('/ultra/runs', requireAgentToken, (_req, res) => res.json({ runs: ultraRuns.list() }));
