@@ -1,9 +1,9 @@
 server/node_modules/
 server/data/
 server/*.log
+.worktrees/
 .env
 .env.*
 !.env.example
 *.zip
 *.crdownload
-
