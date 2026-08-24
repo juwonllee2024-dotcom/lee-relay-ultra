@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body { font-family: system-ui, sans-serif; width: 320px; margin: 0; padding: 12px; }
+    h2 { font-size: 14px; margin: 0 0 8px; }
+    label { display: block; font-size: 12px; margin: 8px 0 4px; color: #333; }
+    input[type="text"] { width: 100%; box-sizing: border-box; padding: 6px; font-size: 12px; border: 1px solid #ccc; border-radius: 4px; }
+    .row { display: flex; align-items: center; gap: 6px; margin: 12px 0; }
+    .status { font-size: 12px; padding: 6px 8px; border-radius: 4px; margin-top: 8px; }
+    .ok { background: #d4edda; color: #155724; }
+    .err { background: #f8d7da; color: #721c24; }
+    button { padding: 6px 10px; font-size: 12px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; background: #fff; }
+    button:hover { background: #f0f0f0; }
+    .hint { font-size: 11px; color: #666; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <h2>ChatGPT Terminal Agent</h2>
+
+  <div class="row">
+    <input type="checkbox" id="auto" />
+    <label for="auto" style="margin:0;">Auto-run detected commands</label>
+  </div>
+
+  <label for="cwd">Working directory (optional)</label>
+  <input type="text" id="cwd" placeholder="e.g. C:\\Users\\you\\project" />
+
+  <div style="margin-top:12px;">
+    <button id="save">Save</button>
+    <button id="check">Check server</button>
+  </div>
+
+  <div id="status" class="status" style="display:none;"></div>
+
+  <div class="hint">
+    1) Run <code>npm start</code> in <code>server/</code><br>
+    2) Open ChatGPT and ask it to write commands.<br>
+    3) Wrap commands in <code><TERMINAL>...</TERMINAL></code>.
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

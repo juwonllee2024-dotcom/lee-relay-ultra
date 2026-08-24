@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agent</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <header>
+    <div class="brand"><span class="brand-mark">⌁</span><div><strong>AGENT SESSION</strong><small id="status">연결 확인 중</small></div></div>
+    <div class="header-actions"><span class="session-id">LOCAL · CHATGPT WEB</span><button id="clear" title="로그 지우기">CLEAR</button></div>
+  </header>
+  <section id="executionGate" class="execution-gate" aria-label="탭별 실행 허용">
+    <div class="gate-copy"><span class="gate-kicker">EXECUTION CONTROL</span><strong id="executionState">실행 잠금</strong><small id="executionTab">현재 탭에서 실행이 꺼져 있습니다.</small></div>
+    <button id="executionToggle" class="execution-toggle" type="button" aria-pressed="false"><span class="toggle-dot"></span><span id="executionToggleLabel">OFF</span></button>
+  </section>
+  <section class="live-card">
+    <div class="live-top"><span class="live-dot"></span><span id="liveLabel">대기 중</span><span class="live-time" id="liveTime">--:--</span></div>
+    <div class="live-task" id="liveTask">ChatGPT에서 작업을 요청하면 에이전트가 시작됩니다.</div>
+    <div class="live-meta"><span id="toolLabel">IDLE / NO TOOL</span><span id="eventCount">0 EVENTS</span><button id="stopAgent">STOP</button></div>
+  </section>
+  <div class="console-bar"><span class="console-title">RUN</span><span class="console-path" id="consolePath">workspace not set</span><span class="console-state">● LIVE</span></div>
+  <section class="settings">
+    <label>작업 폴더<input id="cwd" type="text" placeholder="C:\\project"></label>
+    <button id="save">설정 저장</button>
+  </section>
+  <section class="agent-input">
+    <label>스킬 선택</label>
+    <input id="skillInput" type="text" list="skillOptions" placeholder="@coding 입력">
+    <datalist id="skillOptions"></datalist>
+    <div id="plugins" class="plugins"></div>
+  </section>
+  <section class="text-tools">
+    <div class="activity-head"><span>TXT FILES</span><small>읽기 / 내보내기</small></div>
+    <div class="text-tool-row"><input id="txtPath" type="text" placeholder="notes.txt"><button id="readTxt">읽기</button></div>
+    <textarea id="txtContent" rows="5" placeholder="TXT 내용을 확인하거나 내보낼 내용을 입력하세요."></textarea>
+    <div class="text-tool-row"><input id="txtName" type="text" placeholder="export.txt"><button id="exportTxt">TXT 내보내기</button></div>
+    <div id="txtExports" class="txt-exports">내보낸 TXT 없음</div>
+  </section>
+  <section id="welcome" class="welcome">
+    <h3>에이전트 사용 안내</h3>
+    <p><strong>현재 상태:</strong> 시작 대기 중</p>
+    <p><strong>사용 방법:</strong> 작업 폴더를 저장하고 위의 <b>실행 허용</b>을 켠 뒤 이 Side Panel에 작업을 입력하세요.</p>
+    <p><strong>작동 방식:</strong> Side Panel 요청 → 계획 수립 → 파일 확인 → 도구 실행 → 결과 분석 → 테스트 → 완료</p>
+    <p><strong>중요:</strong> PowerShell, 파일 수정, 브라우저 조작은 컴퓨터에 실제 영향을 줍니다. 자동 실행 전에 작업 폴더를 확인하세요.</p>
+  </section>
+  <section class="workflow" aria-label="작업 진행 단계">
+    <h3><span>RUN PLAN</span><small>LIVE</small></h3>
+    <div class="step" data-step="planning"><i></i><span>계획 중</span></div>
+    <div class="step" data-step="skills"><i></i><span>스킬 선택 중</span></div>
+    <div class="step" data-step="files"><i></i><span>파일 확인 중</span></div>
+    <div class="step" data-step="approval"><i></i><span>명령 승인 대기</span></div>
+    <div class="step" data-step="running"><i></i><span>PowerShell 실행 중</span></div>
+    <div class="step" data-step="analyzing"><i></i><span>결과 분석 중</span></div>
+    <div class="step" data-step="fixing"><i></i><span>오류 수정 중</span></div>
+    <div class="step" data-step="testing"><i></i><span>테스트 중</span></div>
+    <div class="step" data-step="completed"><i></i><span>완료</span></div>
+  </section>
+  <div class="activity-head"><span>ACTIVITY</span><small>더블클릭하면 상세 정보</small></div>
+  <main id="events" aria-live="polite"></main>
+  <section class="changes"><div class="activity-head"><span>FILE CHANGES</span><small id="changeCount">0</small></div><div id="changesList">변경 백업 없음</div></section>
+  <section class="agent-composer">
+    <textarea id="taskInput" rows="2" placeholder="에이전트에게 작업을 요청하세요..."></textarea>
+    <div class="composer-foot"><span>ChatGPT 웹으로 전송</span><button id="sendTask">전송</button></div>
+  </section>
+  <footer>실행 허용은 현재 ChatGPT 탭에만 적용됩니다. 작업은 Side Panel에서만 입력합니다.</footer>
+  <script src="sidepanel.js"></script>
+</body>
+</html>

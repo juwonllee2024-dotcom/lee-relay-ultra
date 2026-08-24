@@ -1,0 +1,5 @@
+[
+  {"name":"github_status","description":"Show the local Git working tree status.","risk":"low","input":"cwd"},
+  {"name":"github_clone","description":"Clone a GitHub repository into the configured workspace using configured Git credentials.","risk":"high","input":"repository/destination/branch/depth"},
+  {"name":"github_download_repo","description":"Download a GitHub repository into the configured workspace using configured Git credentials.","risk":"high","input":"repository/destination/branch/depth"}
+]

@@ -1,0 +1,5 @@
+{
+  "name": "github",
+  "version": "1.0.0",
+  "description": "Download public GitHub repositories into the configured workspace and inspect local Git status."
+}
