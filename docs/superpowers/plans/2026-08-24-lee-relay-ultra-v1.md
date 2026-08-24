@@ -129,5 +129,5 @@
 - [x] Run a smoke test that starts the host on a random local port and stops it.
 - [x] Verify no runtime data, secrets, or `node_modules` are tracked.
 - [x] Verify extension manifest parses and reports version `1.0.0`.
-- [ ] Create a source ZIP without runtime data and record SHA-256.
-- [ ] Report only claims supported by fresh command output.
+- [x] Create a source ZIP without runtime data and record SHA-256: `10149cb1494dd624720c66349a7503869fda1844986e984cfd396ef8e0459eb5`.
+- [x] Report only claims supported by fresh command output.
