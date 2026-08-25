@@ -3,10 +3,22 @@
   "name": "Lee Relay Ultra",
   "version": "1.1.0",
   "description": "Bounded local coding workflows for Planner, Implementer, Reviewer, and Tester agents.",
+  "icons": {
+    "16": "assets/lee-relay-ultra-logo.png",
+    "48": "assets/lee-relay-ultra-logo.png",
+    "128": "assets/lee-relay-ultra-logo.png"
+  },
   "permissions": ["storage", "activeTab", "tabs", "scripting", "sidePanel", "alarms"],
   "host_permissions": ["http://localhost:5747/*", "https://chatgpt.com/*", "https://chat.openai.com/*"],
   "background": { "service_worker": "background.js" },
   "content_scripts": [{ "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"], "js": ["shared/ultra-prompt.js", "shared/ultra-protocol.js", "shared/ultra-context.js", "content.js"], "run_at": "document_idle" }],
-  "action": {},
+  "action": {
+    "default_title": "Open Lee Relay Ultra",
+    "default_icon": {
+      "16": "assets/lee-relay-ultra-logo.png",
+      "48": "assets/lee-relay-ultra-logo.png",
+      "128": "assets/lee-relay-ultra-logo.png"
+    }
+  },
   "side_panel": { "default_path": "sidepanel.html" }
 }

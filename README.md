@@ -1,7 +1,19 @@
-# Lee Relay Ultra v1
+# Lee Relay Ultra v1.1.0
+
+![Lee Relay Ultra logo](extension/assets/lee-relay-ultra-logo.png)
 
 Separate coding product for bounded Planner → Implementer → Reviewer → Tester
-workflows. Lee Relay v4.1.1 is not modified.
+workflows. Lee Relay v4.3.0 is not modified.
+
+## Why Lee Relay Ultra is different
+
+- **It is an execution plane, not another chat room.** AI roles can plan, edit files, run terminal commands, build, test, review diffs, and roll back within one declared workspace.
+- **The company metaphor is executable.** Planner, Implementer, Reviewer, and Tester are explicit roles with workflow-specific capabilities instead of a single general-purpose agent prompt.
+- **Autonomy is bounded at the host.** Workspace containment, command-deny rules, role capabilities, step/command/retry/time limits, Pause, Resume, and Stop are enforced by the local server rather than left to model obedience.
+- **It uses observed-evidence turns.** Browse Code-style prompts, one-action-per-turn protocol, response-stability waits, malformed-action recovery, and result feedback keep coding loops synchronized with real tool results.
+- **Publishing remains a deliberate human boundary.** Merge and push are never automatic in v1, even when Auto Coding is enabled.
+
+Where a normal coding chat suggests changes, Ultra carries a bounded change through the full Planner → Implementer → Reviewer → Tester loop and leaves an inspectable result.
 
 ## What is included
 
