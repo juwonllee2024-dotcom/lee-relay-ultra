@@ -1,3 +1,33 @@
+<!-- JUWON-PORTFOLIO-INTRO:START -->
+# Lee Relay Ultra
+
+![Lee Relay Ultra — portfolio visual](docs/portfolio-preview.jpg)
+
+*Recorded standalone extension-panel preview; execution lock and automatic coding inactive.*
+
+*기존 확장 패널 단독 미리보기 · 실행 잠금·자동 코딩 비활성 상태*
+
+## English
+
+A separate bounded coding-workflow extension and local host for Planner, Implementer, Reviewer, and Tester roles. Workspace constraints and explicit human publishing boundaries remain in place.
+
+[View JUWON's portfolio](https://jupt.pages.dev/) · [Browse the project collection](https://jupt.pages.dev/projects)
+
+**Scope:** This README presents the repository's documented intent and recorded visual evidence. It does not certify that every feature is complete, deployed, or currently working. Follow the original setup, safety, and license documentation below.
+
+## 한국어
+
+계획·구현·검토·테스트 역할과 로컬 코딩 실행을 연결하는 별도 확장.
+
+[JUWON 포트폴리오 보기](https://jupt.pages.dev/) · [전체 프로젝트 보기](https://jupt.pages.dev/projects)
+
+**확인 범위:** 저장소의 문서상 목적과 기록된 화면 근거를 소개합니다. 모든 기능의 완성·배포·현재 정상 작동을 보증하지 않습니다. 설치법·안전 주의사항·라이선스는 아래 기존 문서를 확인하세요.
+<!-- JUWON-PORTFOLIO-INTRO:END -->
+
+---
+
+## Original documentation / 기존 문서
+
 # Lee Relay Ultra v1.1.0
 
 ![Lee Relay Ultra logo](extension/assets/lee-relay-ultra-logo.png)
